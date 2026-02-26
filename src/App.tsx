@@ -198,8 +198,8 @@ export function App() {
 									<button
 										type='button'
 										onClick={goToPrevPage}
-										disabled={currentPage === 1}
-										className='p-1.5 hover:bg-slate-100 disabled:opacity-30 disabled:hover:bg-transparent rounded-lg transition-colors'
+										disabled={!sigImage || currentPage === 1}
+										className='p-1.5 hover:bg-slate-100 disabled:opacity-20 disabled:hover:bg-transparent rounded-lg transition-colors cursor-pointer disabled:cursor-not-allowed text-slate-600'
 									>
 										<svg
 											className='w-5 h-5'
@@ -222,8 +222,9 @@ export function App() {
 											min={1}
 											max={numPages}
 											value={currentPage}
+											disabled={!sigImage}
 											onChange={handlePageInputChange}
-											className='w-12 h-8 text-center bg-slate-50 border border-slate-200 rounded-lg text-xs font-black text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all'
+											className='w-12 h-8 text-center bg-slate-50 border border-slate-200 rounded-lg text-xs font-black text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed'
 										/>
 										<span className='text-[10px] font-black text-slate-400 uppercase tracking-tighter'>
 											/ {numPages || '--'}
@@ -232,8 +233,8 @@ export function App() {
 									<button
 										type='button'
 										onClick={goToNextPage}
-										disabled={currentPage === numPages}
-										className='p-1.5 hover:bg-slate-100 disabled:opacity-30 disabled:hover:bg-transparent rounded-lg transition-colors'
+										disabled={!sigImage || currentPage === numPages}
+										className='p-1.5 hover:bg-slate-100 disabled:opacity-20 disabled:hover:bg-transparent rounded-lg transition-colors cursor-pointer disabled:cursor-not-allowed text-slate-600'
 									>
 										<svg
 											className='w-5 h-5'
