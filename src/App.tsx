@@ -88,14 +88,26 @@ export function App() {
 		`)
 	}
 
+	const handlePageInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+		const value = Number.parseInt(e.target.value, 10)
+		if (!Number.isNaN(value) && value >= 1 && value <= numPages) {
+			setCurrentPage(value)
+			setFinalPosition({ x: 0, y: 0 })
+		}
+	}
+
 	const goToPrevPage = () => {
-		setCurrentPage((prev) => Math.max(prev - 1, 1))
-		setFinalPosition({ x: 0, y: 0 }) // Reset posición al cambiar página
+		if (currentPage > 1) {
+			setCurrentPage(currentPage - 1)
+			setFinalPosition({ x: 0, y: 0 })
+		}
 	}
 
 	const goToNextPage = () => {
-		setCurrentPage((prev) => Math.min(prev + 1, numPages))
-		setFinalPosition({ x: 0, y: 0 }) // Reset posición al cambiar página
+		if (currentPage < numPages) {
+			setCurrentPage(currentPage + 1)
+			setFinalPosition({ x: 0, y: 0 })
+		}
 	}
 
 	return (
@@ -204,9 +216,19 @@ export function App() {
 											/>
 										</svg>
 									</button>
-									<span className='text-xs font-black text-slate-600 min-w-16 text-center tabular-nums'>
-										{currentPage} / {numPages || '--'}
-									</span>
+									<div className='flex items-center gap-1.5 px-2'>
+										<input
+											type='number'
+											min={1}
+											max={numPages}
+											value={currentPage}
+											onChange={handlePageInputChange}
+											className='w-12 h-8 text-center bg-slate-50 border border-slate-200 rounded-lg text-xs font-black text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all'
+										/>
+										<span className='text-[10px] font-black text-slate-400 uppercase tracking-tighter'>
+											/ {numPages || '--'}
+										</span>
+									</div>
 									<button
 										type='button'
 										onClick={goToNextPage}
