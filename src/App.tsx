@@ -11,8 +11,9 @@ pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/b
 export function App() {
 	const [sigImage, setSigImage] = useState<string | null>(null)
 	const [numPages, setNumPages] = useState<number>(0)
+	const [currentPage, setCurrentPage] = useState<number>(1)
 	const [pageWidth, setPageWidth] = useState<number>(0)
-	const [pageHeight, setPageHeight] = useState<number>(0)
+	const [pageHeights, setPageHeights] = useState<Record<number, number>>({})
 	const [finalPosition, setFinalPosition] = useState({ x: 0, y: 0 })
 
 	const sigPad = useRef<SignatureCanvas | null>(null)
@@ -21,6 +22,7 @@ export function App() {
 
 	const onDocumentLoadSuccess = ({ numPages }: { numPages: number }) => {
 		setNumPages(numPages)
+		setCurrentPage(1)
 	}
 
 	const saveSignature = () => {
@@ -53,31 +55,23 @@ export function App() {
 
 	// FUNCIÓN PARA PREPARAR EL ENVÍO AL BACKEND
 	const handleFinalConfirm = () => {
-		if (!sigImage || pageHeight === 0) return
+		const currentPageHeight = pageHeights[currentPage] || 0
+		if (!sigImage || currentPageHeight === 0) return
 
-		// El gap entre páginas definido en el render (border-b-4 = 4px)
-		const PAGE_GAP = 4
+		// La posición Y es relativa a la página actual
+		const relativeY = finalPosition.y
 
-		// 1. Calculamos en qué página está la firma (Base 1 para lógica visual)
-		// Usamos el alto de la página + el gap
-		const visualPageNumber =
-			Math.floor(finalPosition.y / (pageHeight + PAGE_GAP)) + 1
-
-		// 2. Calculamos la Y relativa a esa página específica
-		const relativeY = finalPosition.y % (pageHeight + PAGE_GAP)
-
-		// 3. Obtenemos las dimensiones reales del elemento de la firma
+		// Obtenemos las dimensiones reales del elemento de la firma
 		const signatureWidth = 200
 		const signatureHeight = nodeRef.current?.offsetHeight || 0
 
 		const dataForBackend = {
 			signatureBase64: sigImage,
-			pageIndex: visualPageNumber - 1,
-			// Ahora coordX y coordY son absolutos desde el 0,0 de la página
+			pageIndex: currentPage - 1,
 			coordX: Math.round(finalPosition.x),
 			coordY: Math.round(relativeY),
 			viewportWidth: Math.round(pageWidth),
-			viewportHeight: Math.round(pageHeight),
+			viewportHeight: Math.round(currentPageHeight),
 			signatureWidth: signatureWidth,
 			signatureHeight: signatureHeight,
 			totalDocumentPages: numPages,
@@ -87,10 +81,21 @@ export function App() {
 
 		alert(`
 			DATOS PARA EL BACKEND (DevExpress):
-			- Índice Página: ${dataForBackend.pageIndex}
+			- Página Actual: ${currentPage} (Índice: ${dataForBackend.pageIndex})
 			- Coord X/Y: ${dataForBackend.coordX}, ${dataForBackend.coordY} px
 			- Tamaño Firma: ${dataForBackend.signatureWidth}x${dataForBackend.signatureHeight} px
+			- Tamaño Viewport Página: ${dataForBackend.viewportWidth}x${dataForBackend.viewportHeight} px
 		`)
+	}
+
+	const goToPrevPage = () => {
+		setCurrentPage((prev) => Math.max(prev - 1, 1))
+		setFinalPosition({ x: 0, y: 0 }) // Reset posición al cambiar página
+	}
+
+	const goToNextPage = () => {
+		setCurrentPage((prev) => Math.min(prev + 1, numPages))
+		setFinalPosition({ x: 0, y: 0 }) // Reset posición al cambiar página
 	}
 
 	return (
@@ -159,7 +164,7 @@ export function App() {
 											Y (REL)
 										</span>
 										<span className='text-lg font-bold'>
-											{Math.round(finalPosition.y % (pageHeight + 4))}
+											{Math.round(finalPosition.y)}
 										</span>
 									</div>
 								</div>
@@ -171,13 +176,62 @@ export function App() {
 				{/* VISOR DE DOCUMENTO */}
 				<section className='lg:col-span-8' ref={containerRef}>
 					<div className='bg-white rounded-[2.5rem] shadow-2xl border border-slate-200 overflow-hidden relative'>
-						<div className='p-6 md:p-8 flex items-center justify-between border-b border-slate-100'>
-							<h2 className='text-xl font-bold flex items-center gap-2 text-slate-800'>
-								<div className='w-1.5 h-6 bg-indigo-600 rounded-full' />
-								Visor de Documento
-							</h2>
-							<span className='px-4 py-1.5 bg-slate-100 text-slate-500 rounded-full text-[10px] font-black uppercase tracking-widest border border-slate-200'>
-								Páginas: {numPages || '...'}
+						<div className='p-6 md:p-8 flex items-center justify-between border-b border-slate-100 bg-slate-50/50'>
+							<div className='flex items-center gap-4'>
+								<h2 className='text-xl font-bold flex items-center gap-2 text-slate-800'>
+									<div className='w-1.5 h-6 bg-indigo-600 rounded-full' />
+									Visor de Documento
+								</h2>
+								<div className='flex items-center bg-white border border-slate-200 rounded-xl px-2 py-1 shadow-sm gap-2'>
+									<button
+										type='button'
+										onClick={goToPrevPage}
+										disabled={currentPage === 1}
+										className='p-1.5 hover:bg-slate-100 disabled:opacity-30 disabled:hover:bg-transparent rounded-lg transition-colors'
+									>
+										<svg
+											className='w-5 h-5'
+											fill='none'
+											stroke='currentColor'
+											viewBox='0 0 24 24'
+										>
+											<title>Anterior</title>
+											<path
+												strokeLinecap='round'
+												strokeLinejoin='round'
+												strokeWidth='2'
+												d='M15 19l-7-7 7-7'
+											/>
+										</svg>
+									</button>
+									<span className='text-xs font-black text-slate-600 min-w-16 text-center tabular-nums'>
+										{currentPage} / {numPages || '--'}
+									</span>
+									<button
+										type='button'
+										onClick={goToNextPage}
+										disabled={currentPage === numPages}
+										className='p-1.5 hover:bg-slate-100 disabled:opacity-30 disabled:hover:bg-transparent rounded-lg transition-colors'
+									>
+										<svg
+											className='w-5 h-5'
+											fill='none'
+											stroke='currentColor'
+											viewBox='0 0 24 24'
+										>
+											<title>Siguiente</title>
+											<path
+												strokeLinecap='round'
+												strokeLinejoin='round'
+												strokeWidth='2'
+												d='M9 5l7 7-7 7'
+											/>
+										</svg>
+									</button>
+								</div>
+							</div>
+							<span className='hidden md:inline-block px-4 py-1.5 bg-indigo-50 text-indigo-600 rounded-full text-[10px] font-black uppercase tracking-widest border border-indigo-100'>
+								Pág. Actual: {currentPage}
 							</span>
 						</div>
 
@@ -200,25 +254,23 @@ export function App() {
 											</div>
 										}
 									>
-										{Array.from(new Array(numPages), (_el, index) => (
-											<div
-												key={`page_v3_${index + 1}`}
-												className='relative border-b-4 border-slate-100 last:border-b-0'
-											>
-												<Page
-													pageNumber={index + 1}
-													width={pageWidth > 0 ? pageWidth : 600}
-													renderAnnotationLayer={false}
-													renderTextLayer={false}
-													onLoadSuccess={(page) => {
-														if (index === 0) setPageHeight(page.height)
-													}}
-												/>
-												<div className='absolute bottom-4 right-4 bg-slate-900/10 px-3 py-1 rounded-full text-[10px] font-black text-slate-500 pointer-events-none'>
-													PÁG. {index + 1}
-												</div>
+										<div className='relative'>
+											<Page
+												pageNumber={currentPage}
+												width={pageWidth > 0 ? pageWidth : 600}
+												renderAnnotationLayer={false}
+												renderTextLayer={false}
+												onLoadSuccess={(page) => {
+													setPageHeights((prev) => ({
+														...prev,
+														[currentPage]: page.height,
+													}))
+												}}
+											/>
+											<div className='absolute bottom-4 right-4 bg-slate-900/10 px-3 py-1 rounded-full text-[10px] font-black text-slate-500 pointer-events-none'>
+												PÁG. {currentPage}
 											</div>
-										))}
+										</div>
 									</Document>
 
 									{sigImage && (
