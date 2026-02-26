@@ -277,6 +277,7 @@ export function App() {
 										<Draggable
 											nodeRef={nodeRef}
 											bounds='parent'
+											position={finalPosition}
 											onStop={(_e, data) => {
 												setFinalPosition({ x: data.x, y: data.y })
 											}}
