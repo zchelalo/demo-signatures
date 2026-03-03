@@ -3,6 +3,7 @@ using DevExpress.Pdf.Drawing;
 using DevExpress.Drawing;
 using Microsoft.AspNetCore.Mvc;
 using System.Drawing;
+using System.Text.Json;
 
 namespace demo_signatures.Controllers
 {
@@ -10,73 +11,74 @@ namespace demo_signatures.Controllers
     [Route("api/[controller]")]
     public class SignPdfController : ControllerBase
     {
-        private readonly IWebHostEnvironment _env;
-
-        public SignPdfController(IWebHostEnvironment env)
-        {
-            _env = env;
-        }
-
         [HttpPost("sign")]
-        public IActionResult Sign([FromBody] List<SignatureRequest> signatures)
+        public async Task<IActionResult> Sign([FromForm] string signaturesData, IFormFile document)
         {
-            if (signatures == null || signatures.Count == 0)
+            if (string.IsNullOrEmpty(signaturesData))
                 return BadRequest("No se recibieron firmas.");
 
-            string pdfPath = Path.Combine(_env.ContentRootPath, "file.pdf");
-            if (!System.IO.File.Exists(pdfPath))
-                return NotFound("El archivo PDF base no se encontró en el servidor.");
+            var signatures = JsonSerializer.Deserialize<List<SignatureRequest>>(signaturesData, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
-            using (var processor = new PdfDocumentProcessor())
+            if (signatures == null || signatures.Count == 0)
+                return BadRequest("No se pudieron interpretar las firmas.");
+
+            if (document == null || document.Length == 0)
+                return BadRequest("No se recibió el documento PDF.");
+
+            using (var msPdf = new MemoryStream())
             {
-                processor.LoadDocument(pdfPath);
+                await document.CopyToAsync(msPdf);
+                msPdf.Position = 0;
 
-                for (int i = 0; i < processor.Document.Pages.Count; i++)
+                using (var processor = new PdfDocumentProcessor())
                 {
-                    var pageSignatures = signatures.Where(s => s.PageIndex == i).ToList();
-                    if (pageSignatures.Count > 0)
+                    processor.LoadDocument(msPdf);
+
+                    for (int i = 0; i < processor.Document.Pages.Count; i++)
                     {
-                        using (var graphics = processor.CreateGraphics())
+                        var pageSignatures = signatures.Where(s => s.PageIndex == i).ToList();
+                        if (pageSignatures.Count > 0)
                         {
-                            var page = processor.Document.Pages[i];
-                            double pdfWidth = page.CropBox.Width;
-                            double pdfHeight = page.CropBox.Height;
-
-                            foreach (var sig in pageSignatures)
+                            using (var graphics = processor.CreateGraphics())
                             {
-                                string base64Data = sig.SignatureBase64.Contains(",") 
-                                    ? sig.SignatureBase64.Split(',')[1] 
-                                    : sig.SignatureBase64;
-                                
-                                byte[] imageBytes = Convert.FromBase64String(base64Data);
-  
-                                using (var ms = new MemoryStream(imageBytes))
-                                using (var dxImage = DXImage.FromStream(ms))
+                                var page = processor.Document.Pages[i];
+                                double pdfWidth = page.CropBox.Width;
+                                double pdfHeight = page.CropBox.Height;
+
+                                foreach (var sig in pageSignatures)
                                 {
-                                    double xRatio = pdfWidth / sig.ViewportWidth;
-                                    double yRatio = pdfHeight / sig.ViewportHeight;
+                                    string base64Data = sig.SignatureBase64.Contains(",") 
+                                        ? sig.SignatureBase64.Split(',')[1] 
+                                        : sig.SignatureBase64;
+                                    
+                                    byte[] imageBytes = Convert.FromBase64String(base64Data);
+      
+                                    using (var ms = new MemoryStream(imageBytes))
+                                    using (var dxImage = DXImage.FromStream(ms))
+                                    {
+                                        double xRatio = pdfWidth / sig.ViewportWidth;
+                                        double yRatio = pdfHeight / sig.ViewportHeight;
 
-                                    double x = sig.CoordX * xRatio;
-                                    double yWeb = sig.CoordY * yRatio;
-                                        
-                                    double sigWidth = sig.SignatureWidth * xRatio;
-                                    double sigHeight = (sigWidth / dxImage.Width) * dxImage.Height;
+                                        double x = sig.CoordX * xRatio;
+                                        double y = sig.CoordY * yRatio;
+                                            
+                                        double sigWidth = sig.SignatureWidth * xRatio;
+                                        double sigHeight = (sigWidth / dxImage.Width) * dxImage.Height;
 
-                                    double y = pdfHeight - yWeb - sigHeight;
-
-                                    graphics.DrawImage(dxImage, new RectangleF((float)x, (float)y, (float)sigWidth, (float)sigHeight));
+                                        graphics.DrawImage(dxImage, new RectangleF((float)x, (float)y, (float)sigWidth, (float)sigHeight));
+                                    }
                                 }
+                                graphics.AddToPageForeground(page, 72, 72);
                             }
-                            graphics.AddToPageForeground(page, 72, 72);
                         }
                     }
+
+                    var outStream = new MemoryStream();
+                    processor.SaveDocument(outStream);
+                    outStream.Position = 0;
+
+                    return File(outStream.ToArray(), "application/pdf", "documento_firmado.pdf");
                 }
-
-                var outStream = new MemoryStream();
-                processor.SaveDocument(outStream);
-                outStream.Position = 0;
-
-                return File(outStream.ToArray(), "application/pdf", "documento_firmado.pdf");
             }
         }
     }

@@ -158,16 +158,19 @@ export function App() {
 			viewportWidth: Math.round(pageWidth),
 			viewportHeight: Math.round(pageHeights[sig.pageIndex + 1] || 0),
 			signatureWidth: 200,
-			totalDocumentPages: numPages,
 		}))
 
 		try {
-			const response = await fetch('http://localhost:5125/api/SignPdf/sign', {
+			const pdfResponse = await fetch(pdfUrl)
+			const pdfBlob = await pdfResponse.blob()
+
+			const formData = new FormData()
+			formData.append('document', pdfBlob, 'documento.pdf')
+			formData.append('signaturesData', JSON.stringify(dataForBackend))
+
+			const response = await fetch('http://localhost:5233/api/SignPdf/sign', {
 				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json',
-				},
-				body: JSON.stringify(dataForBackend),
+				body: formData,
 			})
 
 			if (!response.ok) {
@@ -188,7 +191,9 @@ export function App() {
 			alert('Documento firmado y descargado con éxito.')
 		} catch (error) {
 			console.error('Error al firmar el PDF:', error)
-			alert(`Error al procesar el documento: ${error instanceof Error ? error.message : 'Error desconocido'}`)
+			alert(
+				`Error al procesar el documento: ${error instanceof Error ? error.message : 'Error desconocido'}`,
+			)
 		}
 	}
 
