@@ -147,8 +147,9 @@ export function App() {
 		return () => window.removeEventListener('resize', updateWidth)
 	}, [])
 
-	const handleFinalConfirm = () => {
+	const handleFinalConfirm = async () => {
 		if (signatures.length === 0) return
+
 		const dataForBackend = signatures.map((sig) => ({
 			signatureBase64: sig.image,
 			pageIndex: sig.pageIndex,
@@ -159,10 +160,36 @@ export function App() {
 			signatureWidth: 200,
 			totalDocumentPages: numPages,
 		}))
-		console.log('--- DATOS BACKEND ---', dataForBackend)
-		alert(
-			`SE ENVIARÁN ${signatures.length} FIRMAS AL BACKEND. Revisa la consola.`,
-		)
+
+		try {
+			const response = await fetch('http://localhost:5125/api/SignPdf/sign', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+				},
+				body: JSON.stringify(dataForBackend),
+			})
+
+			if (!response.ok) {
+				const errorText = await response.text()
+				throw new Error(`Error del servidor: ${errorText}`)
+			}
+
+			const blob = await response.blob()
+			const url = window.URL.createObjectURL(blob)
+			const a = document.createElement('a')
+			a.href = url
+			a.download = 'documento_firmado.pdf'
+			document.body.appendChild(a)
+			a.click()
+			window.URL.revokeObjectURL(url)
+			a.remove()
+
+			alert('Documento firmado y descargado con éxito.')
+		} catch (error) {
+			console.error('Error al firmar el PDF:', error)
+			alert(`Error al procesar el documento: ${error instanceof Error ? error.message : 'Error desconocido'}`)
+		}
 	}
 
 	return (
