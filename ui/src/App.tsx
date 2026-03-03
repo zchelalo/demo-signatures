@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import Draggable from 'react-draggable'
+import { Resizable } from 're-resizable'
 import { Document, Page, pdfjs } from 'react-pdf'
 import SignatureCanvas from 'react-signature-canvas'
 import 'react-pdf/dist/Page/AnnotationLayer.css'
@@ -14,15 +15,19 @@ interface PlacedSignature {
 	pageIndex: number
 	x: number
 	y: number
+	width: number
+	height: number
 }
 
 function DraggableSignature({
 	sig,
 	onStop,
+	onResize,
 	onRemove,
 }: {
 	sig: PlacedSignature
 	onStop: (x: number, y: number) => void
+	onResize: (width: number, height: number) => void
 	onRemove: () => void
 }) {
 	const nodeRef = useRef<HTMLDivElement>(null)
@@ -33,43 +38,56 @@ function DraggableSignature({
 			bounds='parent'
 			position={{ x: sig.x, y: sig.y }}
 			onStop={(_e, data) => onStop(data.x, data.y)}
+			cancel='.resize-handle'
 		>
 			<div
 				ref={nodeRef}
 				className='absolute top-0 left-0 z-50 cursor-grab active:cursor-grabbing group'
-				style={{ width: '200px' }}
 			>
-				<div className='relative'>
-					<img
-						src={sig.image}
-						className='w-full bg-white/50 border-2 border-dashed border-indigo-500 p-1 rounded-lg transition-all group-hover:bg-white group-hover:shadow-xl'
-						alt='Firma'
-						draggable={false}
-					/>
-					<button
-						type='button'
-						onClick={(e) => {
-							e.stopPropagation()
-							onRemove()
-						}}
-						className='absolute -top-2 -right-2 bg-red-500 text-white p-1 rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-opacity z-60'
-					>
-						<svg
-							className='w-3 h-3'
-							fill='none'
-							stroke='currentColor'
-							viewBox='0 0 24 24'
+				<Resizable
+					size={{ width: sig.width, height: sig.height }}
+					onResizeStop={(_e, _direction, _ref, d) => {
+						onResize(sig.width + d.width, sig.height + d.height)
+					}}
+					lockAspectRatio={true}
+					handleClasses={{
+						bottomRight: 'resize-handle w-4 h-4 bg-indigo-600 rounded-full border-2 border-white absolute -bottom-1 -right-1 cursor-nwse-resize opacity-0 group-hover:opacity-100 transition-opacity z-70 shadow-lg',
+					}}
+					minWidth={50}
+					minHeight={25}
+				>
+					<div className='relative w-full h-full'>
+						<img
+							src={sig.image}
+							className='w-full h-full bg-white/50 border-2 border-dashed border-indigo-500 p-1 rounded-lg transition-all group-hover:bg-white group-hover:shadow-xl'
+							alt='Firma'
+							draggable={false}
+						/>
+						<button
+							type='button'
+							onClick={(e) => {
+								e.stopPropagation()
+								onRemove()
+							}}
+							className='absolute -top-2 -right-2 bg-red-500 text-white p-1 rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-opacity z-60 hover:scale-110 active:scale-90 transition-transform'
 						>
-							<title>Eliminar firma</title>
-							<path
-								strokeLinecap='round'
-								strokeLinejoin='round'
-								strokeWidth='2'
-								d='M6 18L18 6M6 6l12 12'
-							/>
-						</svg>
-					</button>
-				</div>
+							<svg
+								className='w-3 h-3'
+								fill='none'
+								stroke='currentColor'
+								viewBox='0 0 24 24'
+							>
+								<title>Eliminar firma</title>
+								<path
+									strokeLinecap='round'
+									strokeLinejoin='round'
+									strokeWidth='2'
+									d='M6 18L18 6M6 6l12 12'
+								/>
+							</svg>
+						</button>
+					</div>
+				</Resizable>
 			</div>
 		</Draggable>
 	)
@@ -96,12 +114,19 @@ export function App() {
 				alert('Por favor, firma antes de continuar.')
 				return
 			}
+			const canvas = sigPad.current.getCanvas()
+			const aspectRatio = canvas.width / canvas.height
+			const initialWidth = 200
+			const initialHeight = initialWidth / aspectRatio
+
 			const newSignature: PlacedSignature = {
 				id: `sig-${Date.now()}`,
-				image: sigPad.current.getCanvas().toDataURL('image/png'),
+				image: canvas.toDataURL('image/png'),
 				pageIndex: currentPage - 1,
 				x: 0,
 				y: 0,
+				width: initialWidth,
+				height: initialHeight,
 			}
 			setSignatures((prev) => [...prev, newSignature])
 			sigPad.current.clear()
@@ -118,6 +143,12 @@ export function App() {
 
 	const updateSignaturePosition = (id: string, x: number, y: number) => {
 		setSignatures((prev) => prev.map((s) => (s.id === id ? { ...s, x, y } : s)))
+	}
+
+	const updateSignatureSize = (id: string, width: number, height: number) => {
+		setSignatures((prev) =>
+			prev.map((s) => (s.id === id ? { ...s, width, height } : s)),
+		)
 	}
 
 	const goToPrevPage = () => {
@@ -157,7 +188,8 @@ export function App() {
 			coordY: Math.round(sig.y),
 			viewportWidth: Math.round(pageWidth),
 			viewportHeight: Math.round(pageHeights[sig.pageIndex + 1] || 0),
-			signatureWidth: 200,
+			signatureWidth: Math.round(sig.width),
+			signatureHeight: Math.round(sig.height),
 		}))
 
 		try {
@@ -395,6 +427,7 @@ export function App() {
 												key={sig.id}
 												sig={sig}
 												onStop={(x, y) => updateSignaturePosition(sig.id, x, y)}
+												onResize={(w, h) => updateSignatureSize(sig.id, w, h)}
 												onRemove={() => removeSignature(sig.id)}
 											/>
 										))}
